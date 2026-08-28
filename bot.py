@@ -13,7 +13,8 @@ class TextToSQL(dspy.Signature):
     """Generate SQL from natural language.
 
         Database schema:
-          - produtos: nome, departamento
+          - produtos (
+              nome, departamento, preco, marca, quantidade, validade, fornecedor)
     """
     dbschema = dspy.InputField(desc="Databases schema")
     question = dspy.InputField(desc="Natural language question")
@@ -52,8 +53,8 @@ bot = telebot.TeleBot(API_TOKEN)
 
 @bot.message_handler(func=lambda message: True)
 def reply_hi(message):
-  result = generate(message.text)
-  bot.reply_to(message, json.dumps(result))
+#  result = generate(message.text)
+  bot.reply_to(message, json.dumps("oi"))
 
 @bot.message_handler(content_types=['voice'])
 def transcribe_voice_message(message):
