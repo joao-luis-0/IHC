@@ -1,10 +1,12 @@
-import sqlite3
 import dspy
 import telebot #pip install pytelegrambotapi
 import whisper #pip install -U openai-whisper
-### whisper requires ffmpeg: on windows: choco install ffmpeg
 import json
-from database import db_path
+import os
+from dotenv import load_dotenv
+import requests
+
+load_dotenv()
 
 lm = dspy.LM('openai/gemma-4-E2B-it-IQ4_XS', api_base='http://localhost:1337/v1', api_key='not-needed')
 dspy.configure(lm=lm)
@@ -18,43 +20,72 @@ class TextToSQL(dspy.Signature):
     """
     dbschema = dspy.InputField(desc="Databases schema")
     question = dspy.InputField(desc="Natural language question")
-
     sql_query = dspy.OutputField(desc="Valid SQL query")
+
+class ResultToNaturalLanguage(dspy.Signature):
+    """Convert a SQL query result into a natural, conversational answer in Portuguese. Ignore the id column"""
+    question = dspy.InputField(desc="Pergunta original do usuário")
+    sql_query = dspy.InputField(desc="Query SQL executada")
+    result = dspy.InputField(desc="Resultado da consulta em formato JSON")
+    answer = dspy.OutputField(desc="Resposta em linguagem natural, clara e direta")
 
 class ReliableSQLGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
         self.generate_sql = dspy.ChainOfThought(TextToSQL)
+        self.explain_result = dspy.ChainOfThought(ResultToNaturalLanguage)
 
-    def forward(self, schema, question):
-        pred = self.generate_sql(schema=schema, question=question)
+    def forward(self, dbschema, question):
+        pred = self.generate_sql(dbschema=dbschema, question=question)
         return pred
-    
 
-question = "qual o departamento do sabonete?"
+    def explain(self, question, sql_query, result):
+        return self.explain_result(
+            question=question,
+            sql_query=sql_query,
+            result=json.dumps(result, default=str, ensure_ascii=False)
+        )
 
 def generate(question):
-    schema = """
-    CREATE TABLE produtos (
-      nome VARCHAR(50),
-      departmento VARCHAR(50),
-    );
-    """
+    schema = """CREATE TABLE IF NOT EXISTS produtos (
+                codigo TEXT PRIMARY KEY,
+                nome TEXT,
+                departamento TEXT,
+                preco REAL,
+                marca TEXT,
+                quantidade INTEGER,
+                validade TEXT,
+                fornecedor TEXT
+            )"""
     generator = ReliableSQLGenerator()
     sql = generator.forward(schema, question)
-    print(sql)
-    conn = sqlite3.connect(db_path)
-    print(sql.sql_query)
-    results = conn.execute(sql.sql_query).fetchall()
-    return results
+    sql_query = sql.sql_query.strip()
 
-API_TOKEN = ''
-bot = telebot.TeleBot(API_TOKEN)
+    if not sql_query.upper().startswith("SELECT"):
+        raise ValueError("Apenas consultas SELECT são permitidas")
 
-@bot.message_handler(func=lambda message: True)
+    try:
+        print(sql_query)
+        response = requests.post(os.getenv("DATABASE_URL") + "/question", json={"query": sql_query}, timeout=10)
+        response.raise_for_status() 
+        results = response.json()
+    except requests.RequestException as e:
+        results = {"erro": f"Erro ao fazer a consulta: {e}"}
+
+    explanation = generator.explain(question, sql_query, results)
+    return explanation.answer
+
+bot = telebot.TeleBot(os.getenv("TELEGRAM_TOKEN"))
+
+@bot.message_handler(content_types=["text"])
 def reply_hi(message):
-#  result = generate(message.text)
-  bot.reply_to(message, json.dumps("oi"))
+    try:
+        result = generate(message.text)
+        bot.reply_to(message, result)
+    except ValueError as e:
+        bot.reply_to(message, str(e))
+    except Exception:
+        bot.reply_to(message, "Desculpa, algo deu errado ao processar sua mensagem.")
 
 @bot.message_handler(content_types=['voice'])
 def transcribe_voice_message(message):
@@ -68,7 +99,8 @@ def transcribe_voice_message(message):
     result = generate(text)
     bot.reply_to(message, json.dumps(result))
 
-def whisper_transcribe(filepath: str, model="tiny") -> str:
+model = whisper.load_model("tiny")
+def whisper_transcribe(filepath: str) -> str:
     """
     Function to perform ASR on a .mp3 file
     :param filepath: Path to the .mp3 audiofile.
@@ -78,8 +110,6 @@ def whisper_transcribe(filepath: str, model="tiny") -> str:
     slower speed.
     :return: transcribed audio.
     """
-    # Choose tiny model for faster output.
-    model = whisper.load_model(model)
     result = model.transcribe(filepath)
 
     return result["text"]

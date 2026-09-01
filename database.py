@@ -1,20 +1,31 @@
 import os
 import sqlite3
 from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.get("/question")
-def get_question():
-  return {"message": "Hello, World!"}
+from pydantic import BaseModel
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(BASE_DIR, "lojas.db")
 
+app = FastAPI()
+
+class questionRequest(BaseModel):
+  query: str
+
+@app.post("/question")
+async def get_question(question: questionRequest):
+  try:
+    conn = sqlite3.connect(db_path)
+    result = conn.execute(question.query).fetchall()
+  except Exception as e:
+    result = "Erro ao conectar com o banco"
+  finally:
+    conn.close()
+
+  return result
+
 def create_db():
   conn = sqlite3.connect(db_path)
   c = conn.cursor()
-
   
   c.execute("""CREATE TABLE IF NOT EXISTS produtos (
                 codigo TEXT PRIMARY KEY,
@@ -52,7 +63,3 @@ def create_db():
 
   conn.commit()
   conn.close()
-
-# conn = sqlite3.connect(db_path)
-# results = conn.execute("SELECT * from produtos").fetchall()
-# print(results)
