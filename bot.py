@@ -8,7 +8,7 @@ import requests
 
 load_dotenv()
 
-lm = dspy.LM('openai/gemma-4-E2B-it-IQ4_XS', api_base='http://localhost:1337/v1', api_key='not-needed')
+lm = dspy.LM('openai/gemma-4-E2B_q4_0-it', api_base='http://localhost:1337/v1', api_key='not-needed')
 dspy.configure(lm=lm)
 
 class TextToSQL(dspy.Signature):

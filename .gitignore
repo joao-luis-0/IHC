@@ -1,3 +1,35 @@
-__pycache__
-.venv
+# Ambientes virtuais e arquivos gerados pelo Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Tokens e configurações locais; exemplos podem ser versionados
 .env
+.env.*
+!.env.example
+!.env.gepa.example
+
+# Resultados locais da otimização e avaliação
+# Para entregar um relatório selecionado, revise-o e use git add -f caminho.
+resultados/
+
+# Logs e caches de testes
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Configurações pessoais de editores e arquivos do sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Arquivos temporários do SQLite
+*.db-journal
+*.db-wal
+*.db-shm
+
+# lojas.db é parte dos dados de exemplo do projeto e deve ser versionado.
